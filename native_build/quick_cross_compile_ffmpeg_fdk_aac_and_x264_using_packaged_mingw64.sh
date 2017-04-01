@@ -22,12 +22,12 @@ check_missing_packages () {
 check_missing_packages
 set -x
 
-host=i686-w64-mingw32
-prefix=$(pwd)/sandbox/win32/quick_install/install_root
+host=x86_64-w64-mingw32
+prefix=$(pwd)/sandbox/win64/quick_install/install_root
 export PKG_CONFIG_PATH="$prefix/lib/pkgconfig" # let ffmpeg find our dependencies [currently not working :| ]
 
-mkdir -p sandbox/win32/quick_install
-cd sandbox/win32/quick_install
+mkdir -p sandbox/win64/quick_install
+cd sandbox/win64/quick_install
 
 # fdk-aac
 if [[ ! -f $prefix/lib/libfdk-aac.a ]]; then
@@ -52,6 +52,18 @@ if [[ ! -f $prefix/lib/libx264.a ]]; then
   cd ..
 fi
 
+# x265
+if [[ ! -f $prefix/lib/libx265.a ]]; then
+  rm -rf x265
+  hg clone https://bitbucket.org/multicoreware/x265 || exit 1
+  cd x265/build
+  cmake "MinGW Makefiles" ../source -DCMAKE_INSTALL_PREFIX=$prefix -DCMAKE_SYSTEM_NAME=Windows -DENABLE_SHARED=OFF -DCMAKE_BUILD_TYPE=Release \
+		-DCMAKE_C_COMPILER=$host-gcc -DCMAKE_CXX_COMPILER=$host-g++ -DCMAKE_RC_COMPILER=$host-windres -DCMAKE_ASM_YASM_COMPILER=yasm \
+		-DCMAKE_EXE_LINKER_FLAGS="-static-libgcc -static-libstdc++"
+  make -j5 install
+  cd ../..
+fi
+
 # and ffmpeg
 if [[ ! -d ffmpeg_fdk_aac ]]; then
   rm -rf ffmpeg.tmp.git
@@ -62,9 +74,10 @@ fi
 cd ffmpeg_fdk_aac
   # not ready for this since we don't reconfigure after changes: # git pull
   if [[ ! -f config.mak ]]; then
-    ./configure --enable-gpl --enable-libx264 --enable-nonfree \
-      --enable-libfdk-aac --arch=x86 --target-os=mingw32 \
-      --cross-prefix=$host- --pkg-config=pkg-config --prefix=$prefix/ffmpeg_static_fdk_aac
+    ./configure --enable-gpl --enable-libx264 --enable-libx265 --enable-nonfree --enable-version3 \
+      --enable-libfdk-aac --arch=x86_64 --target-os=mingw64 --disable-debug --disable-doc \
+      --cross-prefix=$host- --pkg-config=pkg-config --pkg-config-flags="--static" --prefix=$prefix/ffmpeg_static_fdk_aac \
+      --disable-shared --extra-ldflags="-static -static-libgcc -static-libstdc++"
   fi
   rm **/*.a # attempt force a rebuild...
   make -j5 install && echo "created runnable ffmpeg.exe in $prefix/ffmpeg_static/ffmpeg.exe!"
